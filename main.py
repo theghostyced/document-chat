@@ -1,11 +1,17 @@
 import os
+from dotenv import load_dotenv
 import streamlit as st
 from openai import OpenAI
 import time
 import functions
 
-OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"], organization="org-oYVKtT5sFiNpcO6eApTpupX2")
+load_dotenv()
+
+OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
+client = OpenAI(
+    api_key=OPENAI_API_KEY or st.secrets["OPENAI_API_KEY"],
+    organization="org-oYVKtT5sFiNpcO6eApTpupX2",
+)
 
 if "assistant_id" not in st.session_state:
     st.session_state.assistant_id = functions.create_assistant(client)
@@ -21,6 +27,7 @@ if "thread_id" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+
 def wait_on_run(run):
     print("run", run, "thread_id", st.session_state.thread_id)
     while run.status == "queued" or run.status == "in_progress":
@@ -31,13 +38,11 @@ def wait_on_run(run):
         time.sleep(0.5)
     return run
 
+
 def process_file(file):
     if file:
         try:
-            uploaded_file = client.files.create(
-                file=file,
-                purpose='assistants'
-            )
+            uploaded_file = client.files.create(file=file, purpose="assistants")
             file_id = uploaded_file.id
             st.session_state.file_id = file_id
             st.sidebar.success("File uploaded successfully.")
@@ -47,13 +52,14 @@ def process_file(file):
             st.error(f"Failed to upload file: {str(e)}")
             return None
 
+
 def get_response(question):
     try:
         message = client.beta.threads.messages.create(
             thread_id=st.session_state.thread_id,
             role="user",
             content=question,
-            file_ids=[st.session_state.file_id]
+            file_ids=[st.session_state.file_id],
         )
         run = client.beta.threads.runs.create(
             thread_id=st.session_state.thread_id,
@@ -61,20 +67,25 @@ def get_response(question):
         )
         run = wait_on_run(run)
 
-        messages = client.beta.threads.messages.list(thread_id=st.session_state.thread_id)
+        messages = client.beta.threads.messages.list(
+            thread_id=st.session_state.thread_id
+        )
         message_content = messages.data[0].content[0].text
         # Remove annotations
         annotations = message_content.annotations
         for annotation in annotations:
-            message_content.value = message_content.value.replace(annotation.text, '')
+            message_content.value = message_content.value.replace(annotation.text, "")
         return message_content.value
     except Exception as e:
-            st.error(f"Error in generating response: {str(e)}")
-            return None
+        st.error(f"Error in generating response: {str(e)}")
+        return None
 
-st.subheader('Chat with your Data')
 
-uploaded_file = st.sidebar.file_uploader("Upload your CSV or Excel file", type=["csv", "xlsx"])
+st.subheader("Chat with your Data")
+
+uploaded_file = st.sidebar.file_uploader(
+    "Upload your CSV or Excel file", type=["csv", "xlsx"]
+)
 if uploaded_file is not None:
     process_file(uploaded_file)
 
@@ -87,7 +98,7 @@ if uploaded_file is not None:
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.spinner(text='Generating response...'):
+        with st.spinner(text="Generating response..."):
             response = get_response(prompt)
             st.markdown(response)
         st.session_state.messages.append({"role": "assistant", "content": response})
